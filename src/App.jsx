@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Balloon from './Balloon';
 import Papa from 'papaparse';
 import './App.css';
@@ -11,9 +11,10 @@ function App() {
   const [question, setQuestion] = useState(null);
   const [message, setMessage] = useState('');
   const [score, setScore] = useState(0);
-  const [firstAttempt, setFirstAttempt] = useState(true);
+  const hasMissedRef = useRef(false);
 
   const generateQuestion = (data) => {
+    hasMissedRef.current = false;
     const questionData = data.filter(
       row => row['Vocabulary Category'] === 'Ritual and Religion'
     );
@@ -21,7 +22,6 @@ function App() {
       console.error('No relevant question data found.');
       return;
     }
-    setFirstAttempt(true);
     // Choose a random row for the question
     const randomRow = questionData[Math.floor(Math.random() * questionData.length)];
     setQuestion(randomRow);
@@ -31,18 +31,28 @@ function App() {
   };
 
   const generateOptions = (data, correctAnswer) => {
-    // Get all English words excluding the correct one
-    const distractors = data.filter(row => row.English !== correctAnswer)
-                             .map(row => row.English);
-    let randomDistractors = [];
-    for (let i = 0; i < NUM_OPTIONS - 1; i++) {
-      const randomIndex = Math.floor(Math.random() * distractors.length);
-      randomDistractors.push(distractors[randomIndex]);
+    const correctRow = data.find(row => row.English === correctAnswer);
+    const category = correctRow?.['Vocabulary Category'];
+  
+    const sameCategory = data.filter(row =>
+      row.English !== correctAnswer &&
+      row['Vocabulary Category'] === category
+    );
+  
+    const randomDistractors = [];
+    const used = new Set();
+    while (randomDistractors.length < NUM_OPTIONS - 1 && sameCategory.length) {
+      const idx = Math.floor(Math.random() * sameCategory.length);
+      const word = sameCategory[idx].English;
+      if (!used.has(word)) {
+        used.add(word);
+        randomDistractors.push(word);
+      }
     }
-    // Combine and shuffle options
-    let allOptions = [correctAnswer, ...randomDistractors].sort(() => Math.random() - 0.5);
-    return allOptions;
-  };
+  
+    const allOptions = [correctAnswer, ...randomDistractors];
+    return allOptions.sort(() => Math.random() - 0.5);
+  };  
 
   useEffect(() => {
     Papa.parse('/vocab_list.csv', {
@@ -57,42 +67,65 @@ function App() {
 
   const generateBalloons = (options) => {
     const gap = 100 / (options.length + 1);
-    const newBalloons = options.map((option, index) => ({
-      id: Date.now() + Math.random() + index,
-      x: (index + 1) * gap,
-      y: 100,
-      popped: false,
-      label: option,
-    }));
+    const newBalloons = options.map((option, index) => {
+      const baseX = (index + 1) * gap;
+      return {
+        id: Date.now() + Math.random() + index,
+        x: baseX, // this will now be animated
+        baseX,    // store original x
+        phase: Math.random() * 2 * Math.PI, // gives a random wave phase
+        y: 0,
+        speed: 0.3 + Math.random() * 0.1,
+        popped: false,
+        label: option,
+      };
+    });
     setBalloons(newBalloons);
   };
 
   // Update the position of each balloon (simulate floating upward)
   useEffect(() => {
     const updateInterval = setInterval(() => {
+      const heightPercent = (130 / window.innerHeight) * 100;
+      const time = Date.now(); // 💡 define this outside map
+  
       setBalloons(prev => {
-        const updatedBalloons = prev
-          .map(balloon => ({ ...balloon, y: balloon.y - 0.4 }))
-          .filter(balloon => balloon.y > -10);
-        
-        // If no balloons are left on screen, generate a new question.
-        if (updatedBalloons.length === 0) {
-          generateQuestion(vocabulary);
+        const movedBalloons = prev.map(balloon => {
+          const wiggle = Math.sin((time / 600) + balloon.phase) * 5;
+          return {
+            ...balloon,
+            y: balloon.y + balloon.speed,
+            x: balloon.baseX + wiggle,
+          };
+        });
+  
+        const anyHitBottom = movedBalloons.some(
+          b => (b.y + heightPercent) >= 100
+        );
+  
+        if (anyHitBottom && !hasMissedRef.current) {
+          hasMissedRef.current = true;
+          setScore(prevScore => prevScore - 1);
+          setMessage("Too slow!");
+          setTimeout(() => {
+            setMessage('');
+            generateQuestion(vocabulary);
+          }, 500);
         }
-        return updatedBalloons;
+  
+        return movedBalloons.filter(b => (b.y + heightPercent) < 110);
       });
     }, 50);
+  
     return () => clearInterval(updateInterval);
-  }, [vocabulary]);  
+  }, [vocabulary, question]);  
 
   const popBalloon = (id) => {
     const poppedBalloon = balloons.find(b => b.id === id);
     if (!poppedBalloon) return;
   
     if (poppedBalloon.label === question.English) {
-      if (firstAttempt) {
-        setScore(prevScore => prevScore + 1);
-      }
+      setScore(prevScore => prevScore + 2); // +2 if they get it correct
       setMessage("Correct!");
       setBalloons(prev =>
         prev.map(b => b.id === id ? { ...b, popped: true } : b)
@@ -105,9 +138,9 @@ function App() {
       setTimeout(() => {
         setMessage('');
         generateQuestion(vocabulary);
-      }, 2000);
+      }, 500); // Changed from 2000 ms to 500 ms
     } else {
-      setFirstAttempt(false);
+      setScore(prevScore => prevScore - 1);
       setMessage("Incorrect!");
       // Mark the clicked balloon as popped (so it pops/disappears)
       setBalloons(prev =>
