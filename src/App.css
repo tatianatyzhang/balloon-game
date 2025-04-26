@@ -54,3 +54,52 @@
 .restart-button:hover {
   background-color: #0056b3;
 }
+
+.timer-button {
+  position: absolute;
+  top: 20px; /* Distance from the top edge */
+  left: 20px; /* Distance from the left edge */
+  padding: 10px 20px;
+  font-size: 1em;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.timer-button:disabled {
+  background-color: #6c757d; /* Disabled state color */
+  cursor: not-allowed;
+}
+
+.results-box {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.8); /* Dark background for the box */
+  color: white;
+  padding: 30px;
+  border-radius: 10px;
+  text-align: center;
+  z-index: 20; /* Ensure the results box is above other elements */
+  width: 300px; /* Adjust the width of the results box */
+}
+
+.results-box h2 {
+  font-size: 2em;
+}
+
+.results-box p {
+  font-size: 1.2em;
+}
+
+.results-box button {
+  margin-top: 20px;
+  padding: 5px 10px;
+  color: white;
+  border: none;
+  border-radius: 1px;
+  cursor: pointer;
+}
